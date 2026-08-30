@@ -387,15 +387,15 @@
     font-weight: 700;
   }
 
-  .celebration-time {
+  .celebration-time-box {
+    display: none;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
     background: var(--input-bg);
-    padding: 8px 16px;
+    padding: 10px 18px;
     border-radius: 12px;
-    margin-bottom: 20px;
-    display: inline-block;
+    margin: 12px 0 20px 0;
     border: 1px solid var(--border-color);
   }
 
@@ -408,6 +408,7 @@
     font-weight: 600;
     cursor: pointer;
     font-size: 15px;
+    margin-top: 10px;
   }
 
   .close-celebration:hover { background: var(--accent-hover); }
@@ -533,8 +534,9 @@
     <div class="celebration-emoji">🎉</div>
     <h2>¡Felicidades!</h2>
     <p>Completaste <span class="task-name" id="celebrationTaskName">tu tarea</span></p>
-    <div class="celebration-time" id="celebrationTime">⏱ Tiempo invertido: 00:00:00</div>
-    <br>
+    <div class="celebration-time-box" id="celebrationTimeBox">
+      ⏱ Tiempo invertido: <span id="celebrationTimeText">00:00:00</span>
+    </div>
     <button class="close-celebration" id="closeCelebrationBtn">Cerrar</button>
   </div>
 </div>
@@ -578,35 +580,38 @@
   const resetTimerBtn = document.getElementById('resetTimerBtn');
   const celebrationOverlay = document.getElementById('celebrationOverlay');
   const celebrationTaskName = document.getElementById('celebrationTaskName');
-  const celebrationTime = document.getElementById('celebrationTime');
+  const celebrationTimeBox = document.getElementById('celebrationTimeBox');
+  const celebrationTimeText = document.getElementById('celebrationTimeText');
   const closeCelebrationBtn = document.getElementById('closeCelebrationBtn');
   const fireworksCanvas = document.getElementById('fireworksCanvas');
   const fwCtx = fireworksCanvas.getContext('2d');
 
   const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
 
-  // ===== Persistence (localStorage) =====
+  // ===== Almacenamiento Local (localStorage) =====
   function saveState() {
     try {
       const state = {
-        currentCount,
-        goalCount,
-        taskNameInputVal: taskNameInput.value,
-        timerSeconds,
-        taskCompleted
+        currentCount: currentCount,
+        goalCount: goalCount,
+        taskNameVal: taskNameInput.value,
+        timerSeconds: timerSeconds,
+        taskCompleted: taskCompleted
       };
-      localStorage.setItem('task_counter_state', JSON.stringify(state));
-    } catch(e) {}
+      localStorage.setItem('task_app_data', JSON.stringify(state));
+    } catch(e) {
+      console.error(e);
+    }
   }
 
   function loadState() {
     try {
-      const saved = localStorage.getItem('task_counter_state');
+      const saved = localStorage.getItem('task_app_data');
       if (saved) {
         const state = JSON.parse(saved);
         currentCount = state.currentCount || 0;
         goalCount = state.goalCount || 0;
-        taskNameInput.value = state.taskNameInputVal || '';
+        taskNameInput.value = state.taskNameVal || '';
         timerSeconds = state.timerSeconds || 0;
         taskCompleted = state.taskCompleted || false;
 
@@ -614,7 +619,9 @@
           goalInput.value = goalCount;
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error(e);
+    }
   }
 
   // ===== Theme =====
@@ -774,8 +781,17 @@
       startTimerBtn.disabled = false;
       pauseTimerBtn.disabled = true;
     }
+
     celebrationTaskName.textContent = taskName;
-    celebrationTime.textContent = `⏱ Tiempo invertido: ${formatTime(timerSeconds)}`;
+
+    // Si el cronómetro tiene tiempo grabado (> 0), mostrar la caja de tiempo
+    if (timerSeconds > 0) {
+      celebrationTimeText.textContent = formatTime(timerSeconds);
+      celebrationTimeBox.style.display = 'inline-block';
+    } else {
+      celebrationTimeBox.style.display = 'none';
+    }
+
     celebrationOverlay.classList.add('active');
     saveState();
 
@@ -1020,7 +1036,7 @@
     balloonsCleanupId = setTimeout(cleanupBalloons, CELEBRATION_DURATION);
   }
 
-  // ===== Inicialización =====
+  // ===== Cargar datos al iniciar =====
   loadState();
   updateTaskLabel();
   updateDisplay();
