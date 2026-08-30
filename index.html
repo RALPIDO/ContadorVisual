@@ -1,10 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Contador de Metas Multitarea</title>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+  :root {
+    --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --card-bg: rgba(255, 255, 255, 0.97);
+    --text-primary: #1a202c;
+    --text-secondary: #4a5568;
+    --border-color: rgba(0, 0, 0, 0.1);
+    --input-bg: #f7fafc;
+    --accent: #667eea;
+    --accent-hover: #5a67d8;
+    --success: #48bb78;
+    --danger: #f56565;
+    --shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  }
+
+  [data-theme="dark"] {
+    --bg-gradient: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+    --card-bg: rgba(30, 30, 55, 0.97);
+    --text-primary: #f7fafc;
+    --text-secondary: #cbd5e0;
+    --border-color: rgba(255, 255, 255, 0.12);
+    --input-bg: rgba(255, 255, 255, 0.06);
+    --accent: #7c93ff;
+    --accent-hover: #667eea;
+    --success: #68d391;
+    --danger: #fc8181;
+    --shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-gradient);
+    min-height: 100vh;
+    color: var(--text-primary);
+    transition: background 0.5s ease, color 0.3s ease;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .app-container {
+    width: 100%;
+    max-width: 520px;
+    margin-top: 20px;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 12px;
+  }
+
+  .task-input-wrapper {
+    flex: 1;
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 12px 18px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .task-input-wrapper label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .task-input-wrapper input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .theme-toggle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: none;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 22px;
+    box-shadow: var(--shadow);
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .theme-toggle:hover { transform: rotate(20deg) scale(1.05); }
+
+  /* ===== Estilos del gestor de tareas ===== */
+  .task-manager {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .task-select {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+  }
+
+  .btn-mgr {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .btn-mgr.new { background: var(--accent); color: white; }
+  .btn-mgr.delete { background: var(--danger); color: white; }
+  .btn-mgr:hover { opacity: 0.9; transform: translateY(-1px); }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: 24px;
+    padding: 28px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .progress-section {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .progress-ring-container {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 16px;
+  }
+
+  .progress-ring {
+    transform: rotate(-90deg);
+    width: 100%;
+    height: 100%;
+  }
+
+  .progress-ring-bg {
+    fill: none;
+    stroke: var(--input-bg);
+    stroke-width: 12;
+  }
+
+  .progress-ring-fill {
+    fill: none;
+    stroke: url(#progressGradient);
+    stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .progress-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .progress-count {
+    font-size: 42px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .progress-goal {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .progress-percent {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  .field-group { margin-bottom: 18px; }
+
+  .field-label {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+
+  .stacked-input {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .stacked-input input {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 2px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .stacked-input input:focus { border-color: var(--accent); }
+
+  .stacked-input button {
+    width: 100%;
+    padding: 12px 20px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    font-size: 15px;
+  }
+
+  .stacked-input button:hover { background: var(--accent-hover); }
+  .stacked-input button:active { transform: scale(0.98); }
+
+  .counter-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .btn-main {
+    padding: 20px;
+    border-radius: 16px;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-plus {
+    background: linear-gradient(135deg, #48bb78, #38a169);
+    color: white;
+    font-size: 22px;
+  }
+
+  .btn-plus:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(72, 187, 120, 0.4); }
+  .btn-plus:active { transform: scale(0.98); }
+
+  .btn-plus .sub { font-size: 11px; opacity: 0.9; font-weight: 500; letter-spacing: 1px; }
+
+  .reset-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    margin-bottom: 20px;
+    transition: all 0.2s;
+  }
+
+  .reset-btn:hover { background: var(--danger); color: white; border-color: var(--danger); }
+
+  .divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 20px 0;
+  }
+
+  .timer-section { text-align: center; }
+
+  .timer-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .timer-display {
+    font-size: 48px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+  }
+
+  .timer-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .timer-btn {
+    padding: 10px 22px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+
+  .timer-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .timer-btn.start { background: var(--success); color: white; }
+  .timer-btn.pause { background: #ecc94b; color: #744210; }
+  .timer-btn.reset { background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); }
+  .timer-btn:not(:disabled):hover { transform: translateY(-1px); }
+
+  .celebration-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(8px);
+  }
+
+  .celebration-overlay.active { display: flex; animation: fadeIn 0.5s; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .celebration-message {
+    background: var(--card-bg);
+    padding: 40px 50px;
+    border-radius: 24px;
+    text-align: center;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+    animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 90%;
+    z-index: 1001;
+  }
+
+  @keyframes popIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .celebration-emoji {
+    font-size: 64px;
+    margin-bottom: 16px;
+    animation: bounce 1s infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+  }
+
+  .celebration-message h2 {
+    font-size: 28px;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+  }
+
+  .celebration-message p {
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    font-size: 15px;
+  }
+
+  .celebration-message .task-name { color: var(--accent); font-weight: 700; }
+
+  .celebration-time-box {
+    display: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    padding: 10px 18px;
+    border-radius: 12px;
+    margin: 12px 0 20px 0;
+    border: 1px solid var(--border-color);
+  }
+
+  .close-celebration {
+    padding: 12px 30px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 15px;
+    margin-top: 10px;
+  }
+
+  .close-celebration:hover { background: var(--accent-hover); }
+
+  .balloon {
+    position: fixed;
+    bottom: -100px;
+    width: 50px;
+    height: 65px;
+    border-radius: 50%;
+    animation: floatUp linear forwards;
+    z-index: 999;
+    pointer-events: none;
+  }
+
+  .balloon::after {
+    content: '';
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    width: 1px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  @keyframes floatUp {
+    0% { transform: translateY(0) translateX(0); opacity: 1; }
+    100% { transform: translateY(-110vh) translateX(30px); opacity: 0.8; }
+  }
+
+  #fireworksCanvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999;
+    display: none;
+  }
+
+  @media (max-width: 480px) {
+    .timer-display { font-size: 38px; }
+    .progress-count { font-size: 36px; }
+    .celebration-message h2 { font-size: 22px; }
+    .celebration-message { padding: 30px 25px; }
+  }
+</style>
+</head>
+<body>
+<div class="app-container">
+  <div class="task-manager">
+    <select id="taskSelect" class="task-select"></select>
+    <button id="newTaskBtn" class="btn-mgr new">+ Nueva</button>
+    <button id="deleteTaskBtn" class="btn-mgr delete">🗑️</button>
+  </div>
+
+  <div class="header">
+    <div class="task-input-wrapper">
+      <label for="taskName">Nombre de la actividad</label>
+      <input type="text" id="taskName" placeholder="Ej: Tarea, libro..." />
+    </div>
+    <button class="theme-toggle" id="themeToggle" title="Cambiar tema">🌙</button>
+  </div>
+
+  <div class="card">
+    <div class="progress-section">
+      <div class="progress-ring-container">
+        <svg class="progress-ring" viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#667eea"/>
+              <stop offset="100%" stop-color="#764ba2"/>
+            </linearGradient>
+          </defs>
+          <circle class="progress-ring-bg" cx="100" cy="100" r="85"/>
+          <circle class="progress-ring-fill" id="progressRing" cx="100" cy="100" r="85"
+                  stroke-dasharray="534.07" stroke-dashoffset="534.07"/>
+        </svg>
+        <div class="progress-center">
+          <div class="progress-count"><span id="currentCount">0</span> / <span id="goalDisplay">0</span></div>
+          <div class="progress-goal" id="taskLabel">tu actividad</div>
+          <div class="progress-percent" id="progressPercent">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label" for="goalInput">🎯 Meta total</label>
+      <div class="stacked-input">
+        <input type="number" id="goalInput" placeholder="Ej: 8" min="1"/>
+        <button id="setGoalBtn">Establecer meta</button>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">➕ Añadir al progreso</label>
+      <div class="counter-buttons">
+        <button class="btn-main btn-plus" id="plusOneBtn">
+          <span>+1</span>
+          <span class="sub">AÑADIR UNO</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label" for="customAmount">📝 Cantidad personalizada</label>
+      <div class="stacked-input">
+        <input type="number" id="customAmount" placeholder="Ej: 3" min="1"/>
+        <button id="addCustomBtn">Sumar cantidad</button>
+      </div>
+    </div>
+
+    <button class="reset-btn" id="resetCounterBtn">🔄 Reiniciar contador</button>
+
+    <div class="divider"></div>
+
+    <div class="timer-section">
+      <div class="timer-title">⏱ Cronómetro</div>
+      <div class="timer-display" id="timerDisplay">00:00:00</div>
+      <div class="timer-buttons">
+        <button class="timer-btn start" id="startTimerBtn">Iniciar</button>
+        <button class="timer-btn pause" id="pauseTimerBtn" disabled>Pausar</button>
+        <button class="timer-btn reset" id="resetTimerBtn">Reiniciar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="celebration-overlay" id="celebrationOverlay">
+  <div class="celebration-message">
+    <div class="celebration-emoji">🎉</div>
+    <h2>¡Felicidades!</h2>
+    <p>Completaste <span class="task-name" id="celebrationTaskName">tu tarea</span></p>
+    <div class="celebration-time-box" id="celebrationTimeBox">
+      ⏱ Tiempo invertido: <span id="celebrationTimeText">00:00:00</span>
+    </div>
+    <button class="close-celebration" id="closeCelebrationBtn">Cerrar</button>
+  </div>
+</div>
+
+<canvas id="fireworksCanvas"></canvas>
+
 <script>
   // ===== Dynamic Multi-Task State =====
   let tasks = [];
   let currentTaskId = null;
 
   let timerInterval = null;
-  let timerRunning = false;
   let pendingAnimationType = null;
 
   const CELEBRATION_DURATION = 7500;
@@ -124,7 +703,6 @@
     goalInput.value = active.goalCount > 0 ? active.goalCount : '';
     updateDisplay();
 
-    // Reanudar el ciclo visual si la tarea activa estaba corriendo
     if (active.timerRunning) {
       startTimerInterval();
     } else {
@@ -337,7 +915,7 @@
 
     timerInterval = setInterval(() => {
       updateTimerDisplay();
-    }, 500); // Actualiza la UI frecuentemente
+    }, 500);
   }
 
   function pauseTimer() {
@@ -383,7 +961,6 @@
     updateTimerDisplay();
   });
 
-  // Re-sincronizar cuando el usuario cambia de pestaña o regresa a la ventana
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       updateTimerDisplay();
@@ -606,3 +1183,5 @@
   // ===== Inicialización =====
   loadAllState();
 </script>
+</body>
+</html>
