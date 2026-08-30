@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Contador de Metas</title>
+<title>Contador de Metas Multitarea</title>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 <style>
   :root {
@@ -109,6 +109,45 @@
 
   .theme-toggle:hover { transform: rotate(20deg) scale(1.05); }
 
+  /* ===== Estilos del gestor de tareas ===== */
+  .task-manager {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .task-select {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+  }
+
+  .btn-mgr {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .btn-mgr.new { background: var(--accent); color: white; }
+  .btn-mgr.delete { background: var(--danger); color: white; }
+  .btn-mgr:hover { opacity: 0.9; transform: translateY(-1px); }
+
   .card {
     background: var(--card-bg);
     border-radius: 24px;
@@ -177,9 +216,7 @@
     margin-top: 2px;
   }
 
-  .field-group {
-    margin-bottom: 18px;
-  }
+  .field-group { margin-bottom: 18px; }
 
   .field-label {
     display: block;
@@ -280,9 +317,7 @@
     margin: 20px 0;
   }
 
-  .timer-section {
-    text-align: center;
-  }
+  .timer-section { text-align: center; }
 
   .timer-title {
     font-size: 12px;
@@ -318,10 +353,7 @@
     transition: all 0.2s;
   }
 
-  .timer-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  .timer-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .timer-btn.start { background: var(--success); color: white; }
   .timer-btn.pause { background: #ecc94b; color: #744210; }
@@ -382,10 +414,7 @@
     font-size: 15px;
   }
 
-  .celebration-message .task-name {
-    color: var(--accent);
-    font-weight: 700;
-  }
+  .celebration-message .task-name { color: var(--accent); font-weight: 700; }
 
   .celebration-time-box {
     display: none;
@@ -457,6 +486,12 @@
 </head>
 <body>
 <div class="app-container">
+  <div class="task-manager">
+    <select id="taskSelect" class="task-select"></select>
+    <button id="newTaskBtn" class="btn-mgr new">+ Nueva</button>
+    <button id="deleteTaskBtn" class="btn-mgr delete">🗑️</button>
+  </div>
+
   <div class="header">
     <div class="task-input-wrapper">
       <label for="taskName">Nombre de la actividad</label>
@@ -544,23 +579,25 @@
 <canvas id="fireworksCanvas"></canvas>
 
 <script>
-  // ===== State =====
-  let currentCount = 0;
-  let goalCount = 0;
-  let taskName = 'tu actividad';
+  // ===== Dynamic Multi-Task State =====
+  let tasks = [];
+  let currentTaskId = null;
+
   let timerInterval = null;
-  let timerSeconds = 0;
   let timerRunning = false;
-  let taskCompleted = false;
   let pendingAnimationType = null;
 
   const CELEBRATION_DURATION = 7500;
 
   function formatNumber(num) {
-    return num.toLocaleString('en-US');
+    return (num || 0).toLocaleString('en-US');
   }
 
   // ===== DOM =====
+  const taskSelect = document.getElementById('taskSelect');
+  const newTaskBtn = document.getElementById('newTaskBtn');
+  const deleteTaskBtn = document.getElementById('deleteTaskBtn');
+
   const taskNameInput = document.getElementById('taskName');
   const themeToggle = document.getElementById('themeToggle');
   const currentCountEl = document.getElementById('currentCount');
@@ -588,41 +625,121 @@
 
   const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
 
-  // ===== Almacenamiento Local (localStorage) =====
-  function saveState() {
+  // ===== Persistencia (localStorage) =====
+  function getActiveTask() {
+    return tasks.find(t => t.id === currentTaskId);
+  }
+
+  function saveAllState() {
     try {
-      const state = {
-        currentCount: currentCount,
-        goalCount: goalCount,
-        taskNameVal: taskNameInput.value,
-        timerSeconds: timerSeconds,
-        taskCompleted: taskCompleted
-      };
-      localStorage.setItem('task_app_data', JSON.stringify(state));
+      localStorage.setItem('task_app_multi_data', JSON.stringify({
+        tasks: tasks,
+        currentTaskId: currentTaskId
+      }));
     } catch(e) {
       console.error(e);
     }
   }
 
-  function loadState() {
+  function loadAllState() {
     try {
-      const saved = localStorage.getItem('task_app_data');
+      const saved = localStorage.getItem('task_app_multi_data');
       if (saved) {
-        const state = JSON.parse(saved);
-        currentCount = state.currentCount || 0;
-        goalCount = state.goalCount || 0;
-        taskNameInput.value = state.taskNameVal || '';
-        timerSeconds = state.timerSeconds || 0;
-        taskCompleted = state.taskCompleted || false;
-
-        if (goalCount > 0) {
-          goalInput.value = goalCount;
-        }
+        const data = JSON.parse(saved);
+        tasks = data.tasks || [];
+        currentTaskId = data.currentTaskId || null;
       }
+      
+      // Migración si venías de una versión vieja o lista vacía
+      if (tasks.length === 0) {
+        const legacy = localStorage.getItem('task_app_data');
+        let initialTask = {
+          id: Date.now().toString(),
+          taskNameVal: 'Nueva tarea',
+          currentCount: 0,
+          goalCount: 0,
+          timerSeconds: 0,
+          taskCompleted: false
+        };
+        if (legacy) {
+          try {
+            const parsed = JSON.parse(legacy);
+            initialTask.currentCount = parsed.currentCount || 0;
+            initialTask.goalCount = parsed.goalCount || 0;
+            initialTask.taskNameVal = parsed.taskNameVal || 'Mi Actividad';
+            initialTask.timerSeconds = parsed.timerSeconds || 0;
+            initialTask.taskCompleted = parsed.taskCompleted || false;
+          } catch(e){}
+        }
+        tasks.push(initialTask);
+        currentTaskId = initialTask.id;
+        saveAllState();
+      }
+
+      renderTaskOptions();
+      loadActiveTaskUI();
     } catch(e) {
       console.error(e);
     }
   }
+
+  function renderTaskOptions() {
+    taskSelect.innerHTML = '';
+    tasks.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.taskNameVal || 'Tarea sin nombre';
+      if (t.id === currentTaskId) opt.selected = true;
+      taskSelect.appendChild(opt);
+    });
+  }
+
+  function loadActiveTaskUI() {
+    stopTimer();
+    const active = getActiveTask();
+    if (!active) return;
+
+    taskNameInput.value = active.taskNameVal || '';
+    goalInput.value = active.goalCount > 0 ? active.goalCount : '';
+    updateDisplay();
+    updateTimerDisplay();
+  }
+
+  // ===== Gestor de Tareas Eventos =====
+  taskSelect.addEventListener('change', (e) => {
+    currentTaskId = e.target.value;
+    saveAllState();
+    loadActiveTaskUI();
+  });
+
+  newTaskBtn.addEventListener('click', () => {
+    const newTask = {
+      id: Date.now().toString(),
+      taskNameVal: 'Nueva Actividad',
+      currentCount: 0,
+      goalCount: 0,
+      timerSeconds: 0,
+      taskCompleted: false
+    };
+    tasks.push(newTask);
+    currentTaskId = newTask.id;
+    saveAllState();
+    renderTaskOptions();
+    loadActiveTaskUI();
+    taskNameInput.focus();
+  });
+
+  deleteTaskBtn.addEventListener('click', () => {
+    if (tasks.length <= 1) {
+      alert('Debes mantener al menos una tarea en la lista.');
+      return;
+    }
+    tasks = tasks.filter(t => t.id !== currentTaskId);
+    currentTaskId = tasks[0].id;
+    saveAllState();
+    renderTaskOptions();
+    loadActiveTaskUI();
+  });
 
   // ===== Theme =====
   function applyTheme(theme) {
@@ -642,29 +759,40 @@
     applyTheme('light');
   }
 
-  // ===== Task name =====
+  // ===== Nombre de la actividad =====
   function updateTaskLabel() {
-    const name = taskNameInput.value.trim();
-    taskName = name || 'tu actividad';
-    taskLabelEl.textContent = taskName.toLowerCase();
-    saveState();
+    const active = getActiveTask();
+    if (!active) return;
+
+    active.taskNameVal = taskNameInput.value.trim();
+    const display = active.taskNameVal || 'tu actividad';
+    taskLabelEl.textContent = display.toLowerCase();
+    
+    // Actualiza texto en select
+    const opt = taskSelect.querySelector(`option[value="${active.id}"]`);
+    if (opt) opt.textContent = active.taskNameVal || 'Tarea sin nombre';
+
+    saveAllState();
   }
 
   taskNameInput.addEventListener('input', updateTaskLabel);
   taskNameInput.addEventListener('change', updateTaskLabel);
 
-  // ===== Goal =====
+  // ===== Meta =====
   function setGoal() {
+    const active = getActiveTask();
+    if (!active) return;
+
     const val = parseInt(goalInput.value);
     if (isNaN(val) || val < 1) {
       goalInput.style.borderColor = '#f56565';
       setTimeout(() => { goalInput.style.borderColor = ''; }, 1200);
       return;
     }
-    goalCount = val;
-    taskCompleted = false;
+    active.goalCount = val;
+    active.taskCompleted = false;
     updateDisplay();
-    saveState();
+    saveAllState();
   }
 
   setGoalBtn.addEventListener('click', setGoal);
@@ -672,20 +800,23 @@
     if (e.key === 'Enter') setGoal();
   });
 
-  // ===== Counter =====
+  // ===== Contador =====
   function addToCounter(amount) {
-    if (taskCompleted) return;
-    if (goalCount <= 0) {
+    const active = getActiveTask();
+    if (!active) return;
+
+    if (active.taskCompleted) return;
+    if (active.goalCount <= 0) {
       goalInput.style.borderColor = '#f56565';
       setTimeout(() => { goalInput.style.borderColor = ''; }, 1200);
       goalInput.focus();
       return;
     }
-    currentCount = Math.min(currentCount + amount, goalCount);
+    active.currentCount = Math.min(active.currentCount + amount, active.goalCount);
     updateDisplay();
-    saveState();
+    saveAllState();
 
-    if (currentCount >= goalCount) {
+    if (active.currentCount >= active.goalCount) {
       completeTask();
     }
   }
@@ -709,22 +840,34 @@
   });
 
   resetCounterBtn.addEventListener('click', () => {
-    currentCount = 0;
-    taskCompleted = false;
+    const active = getActiveTask();
+    if (!active) return;
+    active.currentCount = 0;
+    active.taskCompleted = false;
     updateDisplay();
-    saveState();
+    saveAllState();
   });
 
   function updateDisplay() {
-    currentCountEl.textContent = formatNumber(currentCount);
-    goalDisplayEl.textContent = formatNumber(goalCount);
-    const percent = goalCount > 0 ? Math.min((currentCount / goalCount) * 100, 100) : 0;
+    const active = getActiveTask();
+    if (!active) return;
+
+    const current = active.currentCount || 0;
+    const goal = active.goalCount || 0;
+
+    currentCountEl.textContent = formatNumber(current);
+    goalDisplayEl.textContent = formatNumber(goal);
+
+    const name = active.taskNameVal || 'tu actividad';
+    taskLabelEl.textContent = name.toLowerCase();
+
+    const percent = goal > 0 ? Math.min((current / goal) * 100, 100) : 0;
     progressPercentEl.textContent = percent.toFixed(0) + '%';
     const offset = RING_CIRCUMFERENCE - (percent / 100) * RING_CIRCUMFERENCE;
     progressRing.style.strokeDashoffset = offset;
   }
 
-  // ===== Timer =====
+  // ===== Cronómetro =====
   function formatTime(totalSeconds) {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
@@ -733,7 +876,19 @@
   }
 
   function updateTimerDisplay() {
-    timerDisplay.textContent = formatTime(timerSeconds);
+    const active = getActiveTask();
+    const sec = active ? (active.timerSeconds || 0) : 0;
+    timerDisplay.textContent = formatTime(sec);
+  }
+
+  function stopTimer() {
+    if (timerRunning) {
+      timerRunning = false;
+      clearInterval(timerInterval);
+      timerInterval = null;
+      startTimerBtn.disabled = false;
+      pauseTimerBtn.disabled = true;
+    }
   }
 
   startTimerBtn.addEventListener('click', () => {
@@ -742,58 +897,47 @@
     startTimerBtn.disabled = true;
     pauseTimerBtn.disabled = false;
     timerInterval = setInterval(() => {
-      timerSeconds++;
-      updateTimerDisplay();
-      saveState();
+      const active = getActiveTask();
+      if (active) {
+        active.timerSeconds = (active.timerSeconds || 0) + 1;
+        updateTimerDisplay();
+        saveAllState();
+      }
     }, 1000);
   });
 
   pauseTimerBtn.addEventListener('click', () => {
-    if (!timerRunning) return;
-    timerRunning = false;
-    clearInterval(timerInterval);
-    timerInterval = null;
-    startTimerBtn.disabled = false;
-    pauseTimerBtn.disabled = true;
-    saveState();
+    stopTimer();
+    saveAllState();
   });
 
   resetTimerBtn.addEventListener('click', () => {
-    timerRunning = false;
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-    timerSeconds = 0;
+    stopTimer();
+    const active = getActiveTask();
+    if (active) active.timerSeconds = 0;
     updateTimerDisplay();
-    startTimerBtn.disabled = false;
-    pauseTimerBtn.disabled = true;
-    saveState();
+    saveAllState();
   });
 
-  // ===== Celebration =====
+  // ===== Celebración =====
   function completeTask() {
-    taskCompleted = true;
-    if (timerRunning) {
-      timerRunning = false;
-      clearInterval(timerInterval);
-      timerInterval = null;
-      startTimerBtn.disabled = false;
-      pauseTimerBtn.disabled = true;
-    }
+    const active = getActiveTask();
+    if (!active) return;
 
-    celebrationTaskName.textContent = taskName;
+    active.taskCompleted = true;
+    stopTimer();
 
-    // Si el cronómetro tiene tiempo grabado (> 0), mostrar la caja de tiempo
-    if (timerSeconds > 0) {
-      celebrationTimeText.textContent = formatTime(timerSeconds);
+    celebrationTaskName.textContent = active.taskNameVal || 'tu actividad';
+
+    if (active.timerSeconds > 0) {
+      celebrationTimeText.textContent = formatTime(active.timerSeconds);
       celebrationTimeBox.style.display = 'inline-block';
     } else {
       celebrationTimeBox.style.display = 'none';
     }
 
     celebrationOverlay.classList.add('active');
-    saveState();
+    saveAllState();
 
     pendingAnimationType = Math.floor(Math.random() * 3);
   }
@@ -816,7 +960,7 @@
     }
   }
 
-  // ----- Confetti -----
+  // Confetti
   let confettiIntervalId = null;
   let confettiTimeoutId = null;
 
@@ -824,12 +968,7 @@
     const startTime = Date.now();
     const colors = ['#667eea', '#764ba2', '#48bb78', '#ecc94b', '#f56565', '#38b2ac'];
 
-    confetti({
-      particleCount: 150,
-      spread: 100,
-      origin: { y: 0.6 },
-      colors: colors
-    });
+    confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: colors });
 
     confettiIntervalId = setInterval(() => {
       const elapsed = Date.now() - startTime;
@@ -838,28 +977,11 @@
         confettiIntervalId = null;
         return;
       }
-      confetti({
-        particleCount: 3,
-        angle: 60,
-        spread: 60,
-        origin: { x: 0, y: 0.7 },
-        colors: colors
-      });
-      confetti({
-        particleCount: 3,
-        angle: 120,
-        spread: 60,
-        origin: { x: 1, y: 0.7 },
-        colors: colors
-      });
+      confetti({ particleCount: 3, angle: 60, spread: 60, origin: { x: 0, y: 0.7 }, colors: colors });
+      confetti({ particleCount: 3, angle: 120, spread: 60, origin: { x: 1, y: 0.7 }, colors: colors });
 
       if (Math.random() < 0.2) {
-        confetti({
-          particleCount: 40,
-          spread: 80,
-          origin: { x: 0.5, y: 0.5 + Math.random() * 0.3 },
-          colors: colors
-        });
+        confetti({ particleCount: 40, spread: 80, origin: { x: 0.5, y: 0.5 + Math.random() * 0.3 }, colors: colors });
       }
     }, 80);
 
@@ -871,7 +993,7 @@
     }, CELEBRATION_DURATION);
   }
 
-  // ----- Fireworks -----
+  // Fireworks
   let fireworksParticles = [];
   let fireworksRockets = [];
   let fireworksAnimId = null;
@@ -886,14 +1008,8 @@
   window.addEventListener('resize', resizeFireworksCanvas);
 
   function cleanupFireworks() {
-    if (fireworksAnimId) {
-      cancelAnimationFrame(fireworksAnimId);
-      fireworksAnimId = null;
-    }
-    if (fireworksHardStopId) {
-      clearTimeout(fireworksHardStopId);
-      fireworksHardStopId = null;
-    }
+    if (fireworksAnimId) { cancelAnimationFrame(fireworksAnimId); fireworksAnimId = null; }
+    if (fireworksHardStopId) { clearTimeout(fireworksHardStopId); fireworksHardStopId = null; }
     fireworksParticles = [];
     fireworksRockets = [];
     fwCtx.clearRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
@@ -909,11 +1025,8 @@
       const x = Math.random() * fireworksCanvas.width;
       const targetY = 100 + Math.random() * (fireworksCanvas.height * 0.4);
       fireworksRockets.push({
-        x: x,
-        y: fireworksCanvas.height,
-        targetY: targetY,
-        vy: -(8 + Math.random() * 4),
-        hue: Math.random() * 360
+        x: x, y: fireworksCanvas.height, targetY: targetY,
+        vy: -(8 + Math.random() * 4), hue: Math.random() * 360
       });
     }
 
@@ -923,31 +1036,21 @@
         const angle = (Math.PI * 2 * i) / count;
         const speed = 2 + Math.random() * 4;
         fireworksParticles.push({
-          x: rocket.x,
-          y: rocket.y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 1,
-          hue: rocket.hue + Math.random() * 30 - 15,
-          gravity: 0.05
+          x: rocket.x, y: rocket.y,
+          vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+          life: 1, hue: rocket.hue + Math.random() * 30 - 15, gravity: 0.05
         });
       }
     }
 
     function animateFireworks() {
       const elapsed = Date.now() - fireworksStartTime;
-
-      if (elapsed >= CELEBRATION_DURATION) {
-        cleanupFireworks();
-        return;
-      }
+      if (elapsed >= CELEBRATION_DURATION) { cleanupFireworks(); return; }
 
       fwCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
       fwCtx.fillRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
 
-      if (elapsed < 6000 && Math.random() < 0.15) {
-        spawnRocket();
-      }
+      if (elapsed < 6000 && Math.random() < 0.15) spawnRocket();
 
       for (let i = fireworksRockets.length - 1; i >= 0; i--) {
         const r = fireworksRockets[i];
@@ -985,24 +1088,17 @@
       fireworksAnimId = requestAnimationFrame(animateFireworks);
     }
 
-    for (let i = 0; i < 4; i++) {
-      setTimeout(spawnRocket, i * 150);
-    }
-
+    for (let i = 0; i < 4; i++) setTimeout(spawnRocket, i * 150);
     fireworksHardStopId = setTimeout(cleanupFireworks, CELEBRATION_DURATION);
-
     animateFireworks();
   }
 
-  // ----- Balloons -----
+  // Balloons
   let balloonsCleanupId = null;
   let balloonsSpawnTimeouts = [];
 
   function cleanupBalloons() {
-    if (balloonsCleanupId) {
-      clearTimeout(balloonsCleanupId);
-      balloonsCleanupId = null;
-    }
+    if (balloonsCleanupId) { clearTimeout(balloonsCleanupId); balloonsCleanupId = null; }
     balloonsSpawnTimeouts.forEach(id => clearTimeout(id));
     balloonsSpawnTimeouts = [];
     document.querySelectorAll('.balloon').forEach(b => b.remove());
@@ -1011,7 +1107,6 @@
   function launchBalloons() {
     cleanupBalloons();
     const colors = ['#f56565', '#ed64a6', '#9f7aea', '#667eea', '#48bb78', '#ecc94b', '#38b2ac', '#ed8936'];
-
     const floatDuration = 4000;
     const spawnWindow = CELEBRATION_DURATION - floatDuration;
     const totalBalloons = 30;
@@ -1036,11 +1131,8 @@
     balloonsCleanupId = setTimeout(cleanupBalloons, CELEBRATION_DURATION);
   }
 
-  // ===== Cargar datos al iniciar =====
-  loadState();
-  updateTaskLabel();
-  updateDisplay();
-  updateTimerDisplay();
+  // ===== Inicialización =====
+  loadAllState();
 </script>
 </body>
 </html>
