@@ -378,13 +378,25 @@
 
   .celebration-message p {
     color: var(--text-secondary);
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     font-size: 15px;
   }
 
   .celebration-message .task-name {
     color: var(--accent);
     font-weight: 700;
+  }
+
+  .celebration-time {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    padding: 8px 16px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    display: inline-block;
+    border: 1px solid var(--border-color);
   }
 
   .close-celebration {
@@ -521,6 +533,8 @@
     <div class="celebration-emoji">🎉</div>
     <h2>¡Felicidades!</h2>
     <p>Completaste <span class="task-name" id="celebrationTaskName">tu tarea</span></p>
+    <div class="celebration-time" id="celebrationTime">⏱ Tiempo invertido: 00:00:00</div>
+    <br>
     <button class="close-celebration" id="closeCelebrationBtn">Cerrar</button>
   </div>
 </div>
@@ -538,11 +552,8 @@
   let taskCompleted = false;
   let pendingAnimationType = null;
 
-  // Duración exacta de las animaciones: 7.5 segundos
   const CELEBRATION_DURATION = 7500;
 
-  // ===== Utilidad: formatear números con comas cada 3 dígitos =====
-  // 10 -> "10", 100 -> "100", 1000 -> "1,000", 1000000 -> "1,000,000"
   function formatNumber(num) {
     return num.toLocaleString('en-US');
   }
@@ -567,11 +578,44 @@
   const resetTimerBtn = document.getElementById('resetTimerBtn');
   const celebrationOverlay = document.getElementById('celebrationOverlay');
   const celebrationTaskName = document.getElementById('celebrationTaskName');
+  const celebrationTime = document.getElementById('celebrationTime');
   const closeCelebrationBtn = document.getElementById('closeCelebrationBtn');
   const fireworksCanvas = document.getElementById('fireworksCanvas');
   const fwCtx = fireworksCanvas.getContext('2d');
 
   const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
+
+  // ===== Persistence (localStorage) =====
+  function saveState() {
+    try {
+      const state = {
+        currentCount,
+        goalCount,
+        taskNameInputVal: taskNameInput.value,
+        timerSeconds,
+        taskCompleted
+      };
+      localStorage.setItem('task_counter_state', JSON.stringify(state));
+    } catch(e) {}
+  }
+
+  function loadState() {
+    try {
+      const saved = localStorage.getItem('task_counter_state');
+      if (saved) {
+        const state = JSON.parse(saved);
+        currentCount = state.currentCount || 0;
+        goalCount = state.goalCount || 0;
+        taskNameInput.value = state.taskNameInputVal || '';
+        timerSeconds = state.timerSeconds || 0;
+        taskCompleted = state.taskCompleted || false;
+
+        if (goalCount > 0) {
+          goalInput.value = goalCount;
+        }
+      }
+    } catch(e) {}
+  }
 
   // ===== Theme =====
   function applyTheme(theme) {
@@ -596,11 +640,11 @@
     const name = taskNameInput.value.trim();
     taskName = name || 'tu actividad';
     taskLabelEl.textContent = taskName.toLowerCase();
+    saveState();
   }
 
   taskNameInput.addEventListener('input', updateTaskLabel);
   taskNameInput.addEventListener('change', updateTaskLabel);
-  updateTaskLabel();
 
   // ===== Goal =====
   function setGoal() {
@@ -613,6 +657,7 @@
     goalCount = val;
     taskCompleted = false;
     updateDisplay();
+    saveState();
   }
 
   setGoalBtn.addEventListener('click', setGoal);
@@ -631,6 +676,8 @@
     }
     currentCount = Math.min(currentCount + amount, goalCount);
     updateDisplay();
+    saveState();
+
     if (currentCount >= goalCount) {
       completeTask();
     }
@@ -658,10 +705,10 @@
     currentCount = 0;
     taskCompleted = false;
     updateDisplay();
+    saveState();
   });
 
   function updateDisplay() {
-    // Formatear con comas cada 3 dígitos
     currentCountEl.textContent = formatNumber(currentCount);
     goalDisplayEl.textContent = formatNumber(goalCount);
     const percent = goalCount > 0 ? Math.min((currentCount / goalCount) * 100, 100) : 0;
@@ -690,6 +737,7 @@
     timerInterval = setInterval(() => {
       timerSeconds++;
       updateTimerDisplay();
+      saveState();
     }, 1000);
   });
 
@@ -700,6 +748,7 @@
     timerInterval = null;
     startTimerBtn.disabled = false;
     pauseTimerBtn.disabled = true;
+    saveState();
   });
 
   resetTimerBtn.addEventListener('click', () => {
@@ -712,6 +761,7 @@
     updateTimerDisplay();
     startTimerBtn.disabled = false;
     pauseTimerBtn.disabled = true;
+    saveState();
   });
 
   // ===== Celebration =====
@@ -725,7 +775,9 @@
       pauseTimerBtn.disabled = true;
     }
     celebrationTaskName.textContent = taskName;
+    celebrationTime.textContent = `⏱ Tiempo invertido: ${formatTime(timerSeconds)}`;
     celebrationOverlay.classList.add('active');
+    saveState();
 
     pendingAnimationType = Math.floor(Math.random() * 3);
   }
@@ -748,7 +800,7 @@
     }
   }
 
-  // ----- Confetti (7.5 segundos exactos) -----
+  // ----- Confetti -----
   let confettiIntervalId = null;
   let confettiTimeoutId = null;
 
@@ -803,7 +855,7 @@
     }, CELEBRATION_DURATION);
   }
 
-  // ----- Fireworks (7.5 segundos exactos) -----
+  // ----- Fireworks -----
   let fireworksParticles = [];
   let fireworksRockets = [];
   let fireworksAnimId = null;
@@ -877,7 +929,6 @@
       fwCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
       fwCtx.fillRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
 
-      // Lanzar cohetes durante los primeros 6 segundos
       if (elapsed < 6000 && Math.random() < 0.15) {
         spawnRocket();
       }
@@ -927,7 +978,7 @@
     animateFireworks();
   }
 
-  // ----- Balloons (7.5 segundos exactos) -----
+  // ----- Balloons -----
   let balloonsCleanupId = null;
   let balloonsSpawnTimeouts = [];
 
@@ -945,9 +996,8 @@
     cleanupBalloons();
     const colors = ['#f56565', '#ed64a6', '#9f7aea', '#667eea', '#48bb78', '#ecc94b', '#38b2ac', '#ed8936'];
 
-    // Duración de flotado reducida para que quepa en 7.5s
     const floatDuration = 4000;
-    const spawnWindow = CELEBRATION_DURATION - floatDuration; // 3500ms
+    const spawnWindow = CELEBRATION_DURATION - floatDuration;
     const totalBalloons = 30;
     const delayBetween = spawnWindow / totalBalloons;
 
@@ -969,6 +1019,12 @@
 
     balloonsCleanupId = setTimeout(cleanupBalloons, CELEBRATION_DURATION);
   }
+
+  // ===== Inicialización =====
+  loadState();
+  updateTaskLabel();
+  updateDisplay();
+  updateTimerDisplay();
 </script>
 </body>
 </html>
